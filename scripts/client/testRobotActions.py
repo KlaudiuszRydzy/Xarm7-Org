@@ -1,24 +1,26 @@
+import logging
+import threading
 import time
+from typing import Any, Dict, Optional
+
+import cv2
+import json_numpy
 import numpy as np
 import requests
-import json_numpy
-import cv2
-import threading
-import logging
-from typing import Dict, Any, Optional
 
 json_numpy.patch()
 
-from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
-from xarm.wrapper import XArmAPI
 from boundary_manager import BoundaryManager
 from box_boundary import BoxBoundary
+from gello.cameras.realsense_camera import RealSenseCamera, get_device_ids
+from xarm.wrapper import XArmAPI
 
 # ------------------------------
 # Configure Logging
 # ------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 # ------------------------------
 # Helper Functions
@@ -37,7 +39,10 @@ def capture_and_resize(rs_camera):
     resized_image = cv2.resize(color_image, (224, 224))
     return resized_image
 
-def send_observation_and_get_action(server_ip: str, port: int, payload: Dict[str, Any]) -> Optional[np.ndarray]:
+
+def send_observation_and_get_action(
+    server_ip: str, port: int, payload: Dict[str, Any]
+) -> Optional[np.ndarray]:
     """
     Sends the observation payload to the CrossFormer API and retrieves the action.
 
@@ -51,7 +56,9 @@ def send_observation_and_get_action(server_ip: str, port: int, payload: Dict[str
     """
     url = f"http://{server_ip}:{port}/query"
     try:
-        response = requests.post(url, json=payload, timeout=10)  # Set timeout to avoid hanging
+        response = requests.post(
+            url, json=payload, timeout=10
+        )  # Set timeout to avoid hanging
         response.raise_for_status()
         response_text = response.text
         logger.debug(f"Raw response text: {response_text}")
@@ -67,11 +74,15 @@ def send_observation_and_get_action(server_ip: str, port: int, payload: Dict[str
         logger.error(f"Invalid action data: {ve}")
         return None
 
+
 # ------------------------------
 # Configuration Phase Functions
 # ------------------------------
 
-def capture_positions_continuously(robot: XArmAPI, positions: list, capture_event: threading.Event):
+
+def capture_positions_continuously(
+    robot: XArmAPI, positions: list, capture_event: threading.Event
+):
     """
     Continuously captures the robot's Cartesian positions until the capture_event is cleared.
 
@@ -80,7 +91,9 @@ def capture_positions_continuously(robot: XArmAPI, positions: list, capture_even
         positions (list): List to store captured positions.
         capture_event (threading.Event): Event to control capturing.
     """
-    logger.info("Capturing positions... Move the robot within the desired operational space.")
+    logger.info(
+        "Capturing positions... Move the robot within the desired operational space."
+    )
     info = capture_event.is_set()
     logger.info(f"is event set: {info}")
     while capture_event.is_set():
@@ -90,7 +103,10 @@ def capture_positions_continuously(robot: XArmAPI, positions: list, capture_even
         logger.info(f"Captured position: {current_position}")
         time.sleep(0.2)  # capturing rate
 
-def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list) -> None:
+
+def confirm_and_define_boxes(
+    boundary_manager: BoundaryManager, positions: list
+) -> None:
     """
     Allows the user to define multiple bounding boxes interactively.
 
@@ -116,9 +132,10 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list)
     boundary_manager.add_box(box)
     logger.info(f"automatically defined safety box based on captured positions: {box}")
 
-
     while True:
-        define_box = input("Do you want to define a new safety box? (yes/no): ").strip().lower()
+        define_box = (
+            input("Do you want to define a new safety box? (yes/no): ").strip().lower()
+        )
         if define_box == "yes":
             try:
                 min_x = float(input("Enter min X (meters): "))
@@ -127,7 +144,7 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list)
                 max_y = float(input("Enter max Y (meters): "))
                 min_z = float(input("Enter min Z (meters): "))
                 max_z = float(input("Enter max Z (meters): "))
-                
+
                 if min_x > max_x or min_y > max_y or min_z > max_z:
                     logger.error("Minimum values must be less than maximum values.")
                     continue
@@ -138,7 +155,7 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list)
                     min_y=min_y,
                     max_y=max_y,
                     min_z=min_z,
-                    max_z=max_z
+                    max_z=max_z,
                 )
                 boundary_manager.add_box(box)
                 logger.info(f"Added box: {box}")
@@ -149,11 +166,15 @@ def confirm_and_define_boxes(boundary_manager: BoundaryManager, positions: list)
         else:
             logger.error("Invalid input. Please type 'yes' or 'no'.")
 
+
 # ------------------------------
 # Live Operation Functions
 # ------------------------------
 
-def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_manager: BoundaryManager) -> bool:
+
+def execute_action_with_safety(
+    robot: XArmAPI, action: np.ndarray, boundary_manager: BoundaryManager
+) -> bool:
     """
     Executes the action and checks if the new position is within any safety boundaries.
 
@@ -172,12 +193,11 @@ def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_mana
         x, y, z, roll, pitch, yaw = mvpose[:6]
         slow_speed = 10
         slow_acceleration = 50
-        
+
         robot.connect()
         robot.motion_enable(enable=True)
         robot.set_mode(0)
         robot.set_state(state=0)
-
 
         code = robot.set_position(
             x=x,
@@ -187,12 +207,12 @@ def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_mana
             pitch=pitch,
             yaw=yaw,
             radius=None,
-            speed=slow_speed,       # Use default speed
-            mvacc=slow_acceleration,       # Use default acceleration
-            relative=True,         # relativeto pos
+            speed=slow_speed,  # Use default speed
+            mvacc=slow_acceleration,  # Use default acceleration
+            relative=True,  # relativeto pos
             is_radian=True,
-            wait = True,
-            timeout=10
+            wait=True,
+            timeout=10,
         )
 
         if code != 0:
@@ -213,7 +233,9 @@ def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_mana
 
         # Check if the new position is within any boundary box
         if not boundary_manager.is_inside(new_position):
-            logger.error(f"New position {new_position} is outside all safety boxes. Initiating emergency stop.")
+            logger.error(
+                f"New position {new_position} is outside all safety boxes. Initiating emergency stop."
+            )
             robot.set_mode(2)
             # robot.emergency_stop()  # Emergency stop
             return False
@@ -225,9 +247,11 @@ def execute_action_with_safety(robot: XArmAPI, action: np.ndarray, boundary_mana
         robot.disconnect()  # Ensure the robot is stopped in case of unexpected errors
         return False
 
+
 # ------------------------------
 # Main Client Function
 # ------------------------------
+
 
 def run_client(server_ip: str, port: int = 8001):
     """
@@ -264,7 +288,9 @@ def run_client(server_ip: str, port: int = 8001):
     positions = []
     capture_event = threading.Event()
     capture_event.set()
-    capture_thread = threading.Thread(target=capture_positions_continuously, args = (robot, positions, capture_event))
+    capture_thread = threading.Thread(
+        target=capture_positions_continuously, args=(robot, positions, capture_event)
+    )
     capture_thread.daemon = True
 
     try:
@@ -282,13 +308,17 @@ def run_client(server_ip: str, port: int = 8001):
         else:
             logger.info("Robot set to mode 2 for free movement.")
 
-        input("Press Enter to start defining safety boundaries by moving the robot manually...")
+        input(
+            "Press Enter to start defining safety boundaries by moving the robot manually..."
+        )
 
         logger.info("Starting capture of position threads")
         capture_thread.start()
         logger.info("Position capture thread started")
 
-        input("After moving the robot to desired positions, press Enter to proceed to define safety boxes...")
+        input(
+            "After moving the robot to desired positions, press Enter to proceed to define safety boxes..."
+        )
 
         capture_event.clear()
         capture_thread.join()
@@ -314,7 +344,9 @@ def run_client(server_ip: str, port: int = 8001):
         # Live Operation Phase
         # ------------------------------
         logger.info("=== Live Operation Phase ===")
-        input("Press Enter to start live operation (sending camera feed to CrossFormer API)...")
+        input(
+            "Press Enter to start live operation (sending camera feed to CrossFormer API)..."
+        )
 
         operation_running = True
 
@@ -326,24 +358,23 @@ def run_client(server_ip: str, port: int = 8001):
 
             # Create the payload with all required fields
             payload = {
-                "observation": {
-                    "image_high": image.tolist()
-                },
+                "observation": {"image_high": image.tolist()},
                 "modality": "v",
                 "ensemble": True,
                 "model": "crossformer",
-                "dataset_name": "bridge_dataset"  # Ensure this matches the server's dataset_name
+                "dataset_name": "bridge_dataset",  # Ensure this matches the server's dataset_name
             }
 
             # Send observation to server and get action
             action = send_observation_and_get_action(server_ip, port, payload)
 
             if action is not None:
-
                 # Execute action with safety checks
                 success = execute_action_with_safety(robot, action, boundary_manager)
                 if not success:
-                    logger.error("Action execution halted due to safety perimeter breach.")
+                    logger.error(
+                        "Action execution halted due to safety perimeter breach."
+                    )
                     break
 
             else:
@@ -359,6 +390,7 @@ def run_client(server_ip: str, port: int = 8001):
         # ------------------------------
         logger.info("Cleaning up resources.")
         robot.disconnect()
+
 
 # ------------------------------
 # Entry Point

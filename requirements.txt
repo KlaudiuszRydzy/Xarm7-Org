@@ -1,0 +1,6 @@
+git+https://github.com/xArm-Developer/xArm-Python-SDK.git@main#egg=xarm
+git+https://github.com/wuphilipp/gello_software.git@main#egg=gello
+gymnasium
+numpy
+opencv-python
+pyrealsense2
