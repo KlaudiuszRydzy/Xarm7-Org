@@ -31,7 +31,9 @@ def apply_uv(image, mat, **rules):
 
 def apply_xyz(points, mat):
     points_hom = add_col(points)  # 4d
-    points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * 2), points_hom)
+    # bs = points_hom.shape[0]
+    # points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * bs), points_hom)
+    points_hom = np.einsum("ij,kj->ki", mat, points_hom)
     points = remove_col(points_hom)  # 3d
     return points
 
@@ -51,10 +53,12 @@ def perspective_projection(focal_length, H, W):
 
 def apply_persp(points, mat):
     points_hom = add_col(points)  # 4d
-    bs = points_hom.shape[0]
-    points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * bs), points_hom)
+    # bs = points_hom.shape[0]
+    # points_hom = np.einsum("bij,bkj->bki", np.stack([mat] * bs), points_hom)
+    points_hom = np.einsum("ij,kj->ki", mat, points_hom)
     points = remove_col(points_hom)  # 3d
-    points2d = points / points[:, :, -1:]
+    # points2d = points / points[:, :, -1:]
+    points2d = points / points[:, -1:]
     return points2d
 
 
