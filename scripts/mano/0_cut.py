@@ -5,7 +5,9 @@ import time
 import traceback
 from pathlib import Path
 from pprint import pprint
-
+import sys
+xgym_path = Path(__file__).resolve().parents[2]  # Adjust path to ~/repos/xgym
+sys.path.append(str(xgym_path))
 import cv2
 import imageio
 import numpy as np
@@ -17,8 +19,8 @@ from scipy.optimize import least_squares
 from tqdm import tqdm
 from xgym.controllers import KeyboardController
 from xgym.utils import camera as cu
-
-import bala
+from xgym.__init__ import MANO_0, MANO_1
+# import bala
 
 
 def load_images(data_dir):
@@ -39,9 +41,9 @@ def tryex(func):
 
 
 class VideoCutter:
-    def __init__(self, data_dir: Path = bala.BALA_DATA / 'source'):
+    def __init__(self, data_dir: Path = MANO_0):
         self.data_dir = data_dir
-        self.out_dir = data_dir.parent / "output"
+        self.out_dir = MANO_1
         self.videos = list(data_dir.glob("*.mp4"))
 
         # self.reader = imageio.get_reader(video_path)
@@ -85,10 +87,10 @@ class VideoCutter:
         print(self.nframe)
         print(self.frames)
 
-        cv2.waitKey(1)
-        cv2.destroyAllWindows()
-        cv2.destroyWindow(f'{self.videos[self.nvideo]}')
-        cv2.waitKey(1)
+        try:
+            cv2.destroyAllWindows()
+        except cv2.error:
+            print("No OpenCV windows to destroy.")
 
     def next_video(self):
         self.reset()
@@ -110,7 +112,16 @@ class VideoCutter:
             self.display = self.quit
             print("Closed keyboard")
             time.sleep(0.1)
-        quit()
+            done_dir = self.data_dir.parent / "0_input_done"
+            done_dir.mkdir(exist_ok=True)
+
+            # Move all processed videos to done_dir
+            for video in self.videos:
+                dest_path = done_dir / video.name
+                video.rename(dest_path)
+                print(f"Moved {video} to {dest_path}")
+
+        exit(0)
 
     def delete(self):
         self.frames[self.nframe] = None
@@ -187,7 +198,7 @@ class VideoCutter:
         frames = [cv2.cvtColor(f, cv2.COLOR_RGB2BGR) for f in frames]
 
         video = self.videos[self.nvideo]
-        fname: Path = self.out_dir / f"{video.stem}_{c1}_{c2}.mp4"
+        fname = self.out_dir / f"{video.stem}_{c1}_{c2}.mp4"
         fname = str(fname)
 
         cu.save_frames(frames, fname, ext="mp4", fps=30)
